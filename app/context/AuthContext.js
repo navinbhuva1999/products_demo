@@ -5,9 +5,6 @@ import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext(null);
 
-const setCookie = () => {
-
-}
 export const AuthProvider = ({ children }) => {
   const router = useRouter();
   const [authState, setAuthState] = useState({
@@ -15,6 +12,7 @@ export const AuthProvider = ({ children }) => {
     currentUser: null,
     isAuthenticated: false,
     isLoading: true,
+    error: null
   });
 
   useEffect(() => {
@@ -27,9 +25,9 @@ export const AuthProvider = ({ children }) => {
         users,
         isAuthenticated: cUser ? true : false,
         isLoading: false,
-        currentUser : cUser
+        currentUser: cUser ? JSON.parse(cUser) : null,
+        error: null
       });
-    //   setCookie('users', storedUser);
     } else {
       setAuthState(prev => ({ ...prev, isLoading: false }));
     }
@@ -37,73 +35,99 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      const mockUser = {
-        password: credentials.password,
-        userName: credentials.userName,
-      };
-
-      const checkAuth = authState.users.find((user) => user.userName === mockUser.userName && user.password)
-
-      console.log("check..", checkAuth)
       
-     if(checkAuth){
-        localStorage.setItem("user", JSON.stringify((checkAuth)))
+      const user = authState.users.find(
+        (u) => u.userName.toLowerCase() === credentials.userName.toLowerCase()
+      );
 
-        setAuthState({
-            ...authState, isLoading : false, isAuthenticated : true, currentUser : mockUser
-        })
-        router.replace('/');
-     }
-     else {
+      if (!user) {
+        setAuthState(prev => ({
+          ...prev,
+          error: "User not found"
+        }));
+        return false;
+      }
 
-     }
-
-    
+      localStorage.setItem("user", JSON.stringify(user));
+      setAuthState({
+        ...authState,
+        isLoading: false,
+        isAuthenticated: true,
+        currentUser: user,
+        error: null
+      });
+      
+      router.replace('/');
+      return true;
     } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
+      setAuthState(prev => ({
+        ...prev,
+        error: "An error occurred during login. Please try again."
+      }));
+      return false;
     }
   };
 
   const register = async (credentials) => {
     try {
-      const mockUser = {
+      
+      const userExists = authState.users.some(
+        (u) => u.userName.toLowerCase() === credentials.userName.toLowerCase()
+      );
+
+      if (userExists) {
+        setAuthState(prev => ({
+          ...prev,
+          error: "Username already exists. Please choose a different username."
+        }));
+        return false;
+      }
+
+      const newUser = {
         password: credentials.password,
         userName: credentials.userName,
       };
-      const usersData = authState.users || []
-      const userStr = [...usersData, mockUser]
-    
-      localStorage.setItem('users', JSON.stringify(userStr));
-      localStorage.setItem('user', JSON.stringify(mockUser));
+
+      const updatedUsers = [...(authState.users || []), newUser];
+      localStorage.setItem('users', JSON.stringify(updatedUsers));
+      localStorage.setItem('user', JSON.stringify(newUser));
       
       setAuthState({
-        user: userStr,
+        users: updatedUsers,
         isAuthenticated: true,
         isLoading: false,
-        currentUser : mockUser
+        currentUser: newUser,
+        error: null
       });
 
       router.replace('/');
+      return true;
     } catch (error) {
-      console.error('Login failed:', error);
-      throw error;
+      setAuthState(prev => ({
+        ...prev,
+        error: "An error occurred during registration. Please try again."
+      }));
+      return false;
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('users');
-    setAuthState({
-      user: [],
+    localStorage.removeItem('user');
+    setAuthState(prev => ({
+      ...prev,
       isAuthenticated: false,
-      isLoading: false,
-      currentUser : null
-    });
+      currentUser: null,
+      error: null
+    }));
     router.replace('/login');
   };
 
+  const clearError = () => {
+    setAuthState(prev => ({ ...prev, error: null }));
+  };
+
   return (
-    <AuthContext.Provider value={{ authState, login, logout, register }}>
+    <AuthContext.Provider value={{ authState, login, logout, register, clearError }}>
       {children}
     </AuthContext.Provider>
   );
